@@ -1,37 +1,91 @@
 from flask import Flask, render_template, request, jsonify
-from translate import Translator
+from nlp_processor import FAQProcessor
+import os
 
-app = Flask(__name__)
+# Get the directory where this script is located
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Create Flask app with explicit paths
+app = Flask(__name__,
+            template_folder=os.path.join(BASE_DIR, 'templates'),
+            static_folder=os.path.join(BASE_DIR, 'static'),
+            static_url_path='/static')
+
+app.config['JSON_SORT_KEYS'] = False
+
+# Initialize NLP processor
+try:
+    faq_processor = FAQProcessor()
+    print("✅ NLP processor initialized")
+except Exception as e:
+    print(f"❌ Error initializing NLP: {e}")
+    faq_processor = None
+
 
 @app.route('/')
 def index():
+    """Serve the main chatbot page"""
     return render_template('index.html')
 
-@app.route('/translate', methods=['POST'])
-def translate():
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """Handle chat requests"""
+    if not faq_processor:
+        return jsonify({"success": False, "error": "NLP not ready"}), 500
+    
     try:
         data = request.json
-        text = data.get('text')
-        source_lang = data.get('source_lang')
-        target_lang = data.get('target_lang')
+        user_message = data.get('message', '').strip()
+        
+        if not user_message:
+            return jsonify({"success": False, "error": "Empty message"}), 400
+        
+        result = faq_processor.find_best_match(user_message)
+        
+        response = {
+            "success": True,
+            "user_message": user_message,
+            "match_found": result["match_found"],
+            "answer": result.get("answer", result.get("message")),
+            "matched_question": result.get("question"),
+            "confidence": round(result.get("similarity", 0) * 100, 1),
+            "faq_id": result.get("faq_id")
+        }
+        
+        return jsonify(response)
+    
+    except Exception as e:
+        print(f"❌ Error in chat: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
-        if not text:
-            return jsonify({'error': 'No text provided'}), 400
 
-        #create translator
-        translator = Translator(from_lang=source_lang, to_lang=target_lang)
-        translated_text = translator.translate(text)
-
+@app.route('/api/faqs', methods=['GET'])
+def get_faqs():
+    """Get all FAQs"""
+    if not faq_processor:
+        return jsonify({"success": False, "error": "NLP not ready"}), 500
+    
+    try:
+        faqs = faq_processor.get_all_faqs()
         return jsonify({
-            'success': True,
-            'translated_text': translated_text,
-            'original_text': text,
-            'source_lang': source_lang,
-            'target_lang': target_lang
+            "success": True,
+            "faqs": faqs,
+            "total": len(faqs)
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
-if __name__=='__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
-    
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    """Health check"""
+    return jsonify({
+        "status": "ok",
+        "nlp_ready": faq_processor is not None
+    })
+
+
+if __name__ == '__main__':
+    print("🚀 Starting FAQ Chatbot...")
+    app.run(debug=False, port=5001)

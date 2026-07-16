@@ -1,0 +1,47 @@
+{
+    "faqs": [
+        {
+            "id": 1,
+            "question": "How do I reset my password?",
+            "answer": "To reset your password, click on 'Forget Password' on the login page. Enter your email address, and we'll send you a password reset link. Check your inbox and click the link to create a new password."
+
+        },
+        {
+            "id": 2,
+            "question": "What should I do if my app keeps crashing?",
+            "answer": "Try these steps: 1) Close the app completely and restart it. 2) Check if you have the latest version installed. 3) Clear the app cache in settings. 4) If the issue persists, uninstall and reinstall the app. 5) Contact support if the problem continues. "
+
+        },
+        {
+            "id": 3,
+            "question": "How can I update my profile information?",
+            "answer": "Go to Settings > Profile. Click Edit to modify your personal details like name, email, or profile picture. Make sure to save your changes before exiting the page."
+        },
+
+        {
+            "id": 5,
+            "question": "How do I enable two-factor authentication?",
+            "answer": "The app requires IOS 12.0 or higher for iPhone/Ipads, and Android 8.0 or higher for Android devices. You'll need at least 100MB of free storage space. An internet connection is required for full functionality."
+
+        },
+        {
+            "id": 7,
+            "question": "How do I contact customer support?",
+            "answer": "You can reach our support team in serveral ways: Email us at support@company.com, use the in-app chat feature under Help, or call our hotline at 1-800-SUPPORT. Average response time is within 24 hours."
+
+        },
+        {
+            "id": 8,
+            "question": "Can i use the app offline?",
+            "answer": "The app requires an active internet connection for most features. However, you can view previously loaded content offline. To sync your data again, simply reconnect to the internet."
+
+        },
+        {
+            "id": 9,
+            "question": "Is there a free trail available?",
+            "answer": "Yes! We offer a 14-day free trail with full access to all premium features. No credit card is required to start. After the trail ends, you can choose to subscribe or continue with our free plan with limited features."
+
+        }
+    ]
+
+}

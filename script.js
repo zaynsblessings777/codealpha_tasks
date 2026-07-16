@@ -1,179 +1,232 @@
-// Get elements
-const inputText = document.getElementById('input-text');
-const outputText = document.getElementById('output-text');
-const sourceLang = document.getElementById('source-lang');
-const targetLang = document.getElementById('target-lang');
-const translateBtn = document.getElementById('translate-btn');
-const copyBtn = document.getElementById('copy-btn');
-const speakBtn = document.getElementById('speak-btn');
-const swapBtn = document.getElementById('swap-btn');
-const statusDiv = document.getElementById('status');
-const charInput = document.getElementById('char-input');
-const darkModeBtn = document.getElementById('dark-mode-btn');
+const chatForm = document.getElementById('chatForm');
+const userInput = document.getElementById('userInput');
+const messagesContainer = document.getElementById('messagesContainer');
+const typingIndicator = document.getElementById('typingIndicator');
+const clearBtn = document.getElementById('clearBtn');
+const faqList = document.getElementById('faqList');
+const toggleFaqBtn = document.getElementById('toogleFaqBtn');
 
-// Dark mode
-darkModeBtn.addEventListener('click', () => {
-    document.body.classList.toggle('dark-mode');
-    localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
+// Load FAQs when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    loadFAQs();
 });
 
-// Load dark mode preference
-if (localStorage.getItem('darkMode') === 'true') {
-    document.body.classList.add('dark-mode');
-}
+/**
+ *  Handle form submission (when user sends a message)
+ */
+chatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-// Character counter
-inputText.addEventListener('input', () => {
-    charInput.textContent = inputText.value.length;
-});
+    const message = userInput.value.trim();
+    if (!message) return;
 
-// Translate function
-translateBtn.addEventListener('click', async () => {
-    const text = inputText.value.trim();
-    
-    if (!text) {
-        showStatus('Please enter text to translate', 'error');
-        return;
-    }
-    
-    showStatus('Translating...', 'loading');
-    setLoadingState(true);
-    
+    // Display user message in chat
+    displayMessage(message, 'user');
+    userInput.value = '';
+
+    // show typing indicator
+    typingIndicator.style.display = 'flex';
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
     try {
-        const response = await fetch('/translate', {
+        // Send question to Flask backend
+        const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                text: text,
-                source_lang: sourceLang.value,
-                target_lang: targetLang.value
-            })
+            body: JSON.stringify({ message })
         });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            outputText.value = data.translated_text;
-            showStatus('Translation complete! ✓', 'success');
-            setTimeout(() => statusDiv.style.display = 'none', 3000);
-        } else {
-            showStatus('Error: ' + data.error, 'error');
+
+        if (!response.ok) {
+            throw new Error('API error');
         }
+
+        const data = await response.json();
+
+        // Hide typing indicator
+        typingIndicator.style.display = 'none';
+
+        if (data.success) {
+            // Display bot response with confidence
+            displayBotResponse(
+                data.answer,
+                data.matched_question,
+                data.confidence,
+                data.match_found
+            );
+        } else {
+            displayMessage('Sorry, an error occurred.', 'bot');
+        }
+
+        // Scroll to bottom
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
     } catch (error) {
-        showStatus('Error: ' + error.message, 'error');
-    } finally {
-        setLoadingState(false);
+        console.error('Error:', error);
+        typingIndicator.style.display = 'none';
+        displayMessage('Unable to connect to the server. Is Flask running?', 'bot');
     }
 });
 
-// Copy button with feedback
-copyBtn.addEventListener('click', () => {
-    const text = outputText.value;
-    
-    if (!text) {
-        showStatus('Nothing to copy', 'error');
-        return;
+/**
+ * Display a message in the chat
+ */
+function displayMessage(text, sender) {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message', `${sender}-message`);
+
+    const avatar = sender === 'user' ? '👤' : '🤖';
+
+    messageDiv.innerHTML = `
+        <div class="message-avatar">${avatar}</div>
+        <div class="message-content">${escapeHtml(text)}</div>
+    `;
+
+    messagesContainer.appendChild(messageDiv);
+}
+
+/**
+ * Display bot response with confidence badge
+ */
+function displayBotResponse(answer, matchedQuestion, confidence, matchFound) {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message', 'bot-message');
+
+    // Determine confidence level
+    let confidenceClass = 'confidence-low';
+    if (confidence >= 70) confidenceClass = 'confidence-high';
+    else if (confidence >= 50) confidenceClass = 'confidence-medium';
+
+    // Build response content
+    let content = `<div class="message-avatar">🤖</div>`;
+    content += `<div class="message-content">`;
+    content += `<p>${escapeHtml(answer)}</p>`;
+
+    // Add confidence badge
+    content += `<div class="confidence-badge ${confidenceClass}">
+        Confidence: ${confidence.toFixed(1)}%
+    </div>`;
+
+    if (matchedQuestion && matchFound) {
+        content += `<div style="font-size: 12px; margin-top: 8px; color: #999;">
+            <em>Matched: "${escapeHtml(matchedQuestion)}"</em>
+        </div>`;
     }
-    
-    navigator.clipboard.writeText(text).then(() => {
-        showStatus('✓ Copied to clipboard!', 'success');
-        copyBtn.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-            copyBtn.style.transform = 'scale(1)';
-            statusDiv.style.display = 'none';
-        }, 2000);
-    }).catch(err => {
-        showStatus('Failed to copy', 'error');
+    content += `</div>`;
+    messageDiv.innerHTML = content;
+
+    messagesContainer.appendChild(messageDiv);
+}
+
+/**
+ * Load all FAQs from backend and display in sidebar
+ */
+async function loadFAQs() {
+    try {
+        const response = await fetch('/api/faqs');
+        if (!response.ok) throw new Error('Failed to load FAQs');
+
+        const data = await response.json();
+
+        if (data.success && data.faqs) {
+            faqList.innerHTML = '';
+
+            data.faqs.forEach(faq => {
+                const faqItem = document.createElement('div');
+                faqItem.classList.add('faq-item');
+                faqItem.innerHTML = `
+                    <strong>Q${faq.id}:</strong>
+                    ${escapeHtml(faq.question)}
+                `;
+                // Click to insert into input
+                faqItem.addEventListener('click', () => {
+                    userInput.value = faq.question;
+                    userInput.focus();
+                });
+
+                faqList.appendChild(faqItem);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading FAQs:', error);
+        faqList.innerHTML = '<p class="loading">Failed to load FAQs</p>';
+    }
+}
+
+/**
+ * Clear chat history
+ */
+clearBtn.addEventListener('click', () => {
+    const allMessages = messagesContainer.querySelectorAll('.message');
+    allMessages.forEach(msg => msg.remove());
+
+    // Re-add welcome message
+    const welcomeDiv = document.createElement('div');
+    welcomeDiv.classList.add('message', 'bot-message', 'welcome-message');
+    welcomeDiv.innerHTML = `
+        <div class="message-avatar">🤖</div>
+        <div class="message-content">
+            <p><strong>Welcome to Tech Support!</strong></p>
+            <p>I'm here to help answer your questions about our software. Just ask me anything!</p>
+        </div>
+    `;
+    messagesContainer.appendChild(welcomeDiv);
+
+    userInput.focus();
+});
+
+/**
+ * Toggle FAQ panel
+ */
+toggleFaqBtn.addEventListener('click', () => {
+    const faqPanel = document.querySelector('.faq-panel');
+    const isHidden = faqPanel.style.display === 'none';
+    faqPanel.style.display = isHidden ? 'flex' : 'none';
+    toggleFaqBtn.textContent = isHidden ? '-' : '+';
+});
+
+/**
+ * Quick topic buttons
+ */
+document.querySelectorAll('.topic-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const topic = btn.getAttribute('data-topic');
+        const queries = {
+            password: 'How do I reset my password?',
+            crash: 'What should I do if my app keeps crashing?',
+            security: 'Is my data encrypted and secure?',
+            settings: 'How can I update my profile information?',
+            support: 'How do I contact customer support?'
+        };
+
+        userInput.value = queries[topic] || '';
+        userInput.focus();
     });
 });
 
-// Text-to-Speech
-speakBtn.addEventListener('click', () => {
-    const text = outputText.value;
-    
-    if (!text) {
-        showStatus('Nothing to speak', 'error');
-        return;
-    }
-    
-    // Stop any ongoing speech
-    window.speechSynthesis.cancel();
-    
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = targetLang.value;
-    utterance.rate = 0.9;
-    
-    utterance.onstart = () => {
-        showStatus('🔊 Speaking...', 'loading');
-        speakBtn.style.transform = 'scale(0.95)';
-    };
-    
-    utterance.onend = () => {
-        showStatus('✓ Finished speaking!', 'success');
-        speakBtn.style.transform = 'scale(1)';
-        setTimeout(() => statusDiv.style.display = 'none', 2000);
-    };
-    
-    utterance.onerror = () => {
-        showStatus('Error speaking text', 'error');
-        speakBtn.style.transform = 'scale(1)';
-    };
-    
-    window.speechSynthesis.speak(utterance);
-});
-
-// Swap languages
-swapBtn.addEventListener('click', () => {
-    const temp = sourceLang.value;
-    sourceLang.value = targetLang.value;
-    targetLang.value = temp;
-    
-    // Swap text if translation exists
-    if (outputText.value) {
-        const tempText = inputText.value;
-        inputText.value = outputText.value;
-        outputText.value = tempText;
-        charInput.textContent = inputText.value.length;
-    }
-});
-
-// Status message
-function showStatus(message, type) {
-    statusDiv.textContent = message;
-    statusDiv.className = `status ${type}`;
-    statusDiv.style.display = 'block';
+/**
+ * Escape HTML special characters for security
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
-// Loading state
-function setLoadingState(isLoading) {
-    const btnText = translateBtn.querySelector('.btn-text');
-    const spinner = translateBtn.querySelector('.loading-spinner');
-    
-    if (isLoading) {
-        translateBtn.disabled = true;
-        translateBtn.classList.add('loading');
-        btnText.style.display = 'none';
-        spinner.style.display = 'inline-block';
-    } else {
-        translateBtn.disabled = false;
-        translateBtn.classList.remove('loading');
-        btnText.style.display = 'inline';
-        spinner.style.display = 'none';
-    }
-}
-
-// Clear status on input
-inputText.addEventListener('input', () => {
-    if (statusDiv.textContent && !statusDiv.classList.contains('loading')) {
-        statusDiv.style.display = 'none';
-    }
+/**
+ * Focus input on page load
+ */
+window.addEventListener('load', () => {
+    userInput.focus();
 });
 
-// Allow Enter key to translate (Ctrl+Enter)
-inputText.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.key === 'Enter') {
-        translateBtn.click();
+/**
+ * Handle Enter key
+ */
+userInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        chatForm.dispatchEvent(new Event('submit'));
     }
 });
